@@ -4,7 +4,12 @@ import { forecastData, money } from "@/lib/demo-data";
 
 export function ForecastChart({ detailed = false }: { detailed?: boolean }) {
   return <div className={detailed ? "chart-large" : "chart"} aria-label="90-day cash flow forecast chart">
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer
+      width="100%"
+      height="100%"
+      minWidth={0}
+      initialDimension={{ width: 800, height: detailed ? 390 : 200 }}
+    >
       <AreaChart data={forecastData} margin={{ top: 12, right: 8, bottom: 0, left: -18 }}>
         <defs><linearGradient id="cashArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#18745A" stopOpacity={0.2}/><stop offset="1" stopColor="#18745A" stopOpacity={0}/></linearGradient></defs>
         <CartesianGrid vertical={false} stroke="#E7E4DB" />
