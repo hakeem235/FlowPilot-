@@ -1,0 +1,277 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  VIEWED
+  DUE_SOON
+  OVERDUE
+  PARTIALLY_PAID
+  PAID
+}
+
+enum ScenarioType {
+  HIRE
+  EQUIPMENT
+  CUSTOMER_LOSS
+  PRICE_INCREASE
+  PAYMENT_DELAY
+  RECURRING_EXPENSE
+}
+
+model User {
+  id          String               @id @default(cuid())
+  clerkUserId String               @unique
+  email       String               @unique
+  name        String?
+  memberships OrganizationMember[]
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+}
+
+model Organization {
+  id                  String                @id @default(cuid())
+  clerkOrganizationId String                @unique
+  name                String
+  slug                String                @unique
+  currency            String                @default("SAR")
+  openingBalance      Decimal               @default(0) @db.Decimal(14, 2)
+  minimumCashBuffer   Decimal               @default(0) @db.Decimal(14, 2)
+  taxReservePercent   Decimal               @default(15) @db.Decimal(5, 2)
+  members             OrganizationMember[]
+  accounts            Account[]
+  categories          TransactionCategory[]
+  transactions        Transaction[]
+  recurringRules      RecurringRule[]
+  clients             Client[]
+  invoices            Invoice[]
+  forecasts           Forecast[]
+  scenarios           Scenario[]
+  taxReserves         TaxReserve[]
+  notifications       Notification[]
+  auditEvents         AuditEvent[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  role           MemberRole   @default(MEMBER)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Account {
+  id             String        @id @default(cuid())
+  organizationId String
+  name           String
+  bankName       String?
+  balance        Decimal       @db.Decimal(14, 2)
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId])
+}
+
+model TransactionCategory {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  type           TransactionType
+  color          String          @default("#6C7C76")
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+  recurringRules RecurringRule[]
+
+  @@unique([organizationId, name, type])
+}
+
+model Transaction {
+  id             String               @id @default(cuid())
+  organizationId String
+  accountId      String
+  categoryId     String?
+  type           TransactionType
+  amount         Decimal              @db.Decimal(14, 2)
+  description    String
+  transactedAt   DateTime
+  externalId     String?
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        Account              @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category       TransactionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  createdAt      DateTime             @default(now())
+
+  @@index([organizationId, transactedAt])
+}
+
+model RecurringRule {
+  id             String               @id @default(cuid())
+  organizationId String
+  categoryId     String?
+  name           String
+  type           TransactionType
+  amount         Decimal              @db.Decimal(14, 2)
+  dayOfMonth     Int
+  active         Boolean              @default(true)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category       TransactionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+}
+
+model Client {
+  id               String       @id @default(cuid())
+  organizationId   String
+  name             String
+  email            String?
+  paymentTermsDays Int          @default(30)
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoices         Invoice[]
+
+  @@index([organizationId])
+}
+
+model Invoice {
+  id                 String           @id @default(cuid())
+  organizationId     String
+  clientId           String
+  number             String
+  status             InvoiceStatus    @default(DRAFT)
+  amount             Decimal          @db.Decimal(14, 2)
+  issuedAt           DateTime
+  dueAt              DateTime
+  predictedPaymentAt DateTime?
+  confirmedPaymentAt DateTime?
+  organization       Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client             Client           @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  payments           InvoicePayment[]
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([organizationId, number])
+  @@index([organizationId, dueAt])
+}
+
+model InvoicePayment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Decimal  @db.Decimal(14, 2)
+  paidAt    DateTime
+  reference String?
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Forecast {
+  id             String          @id @default(cuid())
+  organizationId String
+  startsAt       DateTime
+  endsAt         DateTime
+  openingBalance Decimal         @db.Decimal(14, 2)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entries        ForecastEntry[]
+  createdAt      DateTime        @default(now())
+
+  @@index([organizationId, createdAt])
+}
+
+model ForecastEntry {
+  id                  String   @id @default(cuid())
+  forecastId          String
+  date                DateTime
+  expectedBalance     Decimal  @db.Decimal(14, 2)
+  optimisticBalance   Decimal  @db.Decimal(14, 2)
+  conservativeBalance Decimal  @db.Decimal(14, 2)
+  expectedIncome      Decimal  @db.Decimal(14, 2)
+  expectedExpense     Decimal  @db.Decimal(14, 2)
+  explanation         Json
+  forecast            Forecast @relation(fields: [forecastId], references: [id], onDelete: Cascade)
+
+  @@unique([forecastId, date])
+}
+
+model Scenario {
+  id             String               @id @default(cuid())
+  organizationId String
+  name           String
+  type           ScenarioType
+  active         Boolean              @default(false)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  adjustments    ScenarioAdjustment[]
+  createdAt      DateTime             @default(now())
+
+  @@index([organizationId])
+}
+
+model ScenarioAdjustment {
+  id          String   @id @default(cuid())
+  scenarioId  String
+  date        DateTime
+  amount      Decimal  @db.Decimal(14, 2)
+  recurring   Boolean  @default(false)
+  description String
+  scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+}
+
+model TaxReserve {
+  id             String       @id @default(cuid())
+  organizationId String
+  period         String
+  estimatedTax   Decimal      @db.Decimal(14, 2)
+  reservedAmount Decimal      @db.Decimal(14, 2)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, period])
+}
+
+model Notification {
+  id             String       @id @default(cuid())
+  organizationId String
+  title          String
+  body           String
+  severity       String
+  readAt         DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+}
+
+model AuditEvent {
+  id               String       @id @default(cuid())
+  organizationId   String
+  actorClerkUserId String
+  action           String
+  entityType       String
+  entityId         String?
+  metadata         Json?
+  ipHash           String?
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt        DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+}

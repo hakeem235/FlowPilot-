@@ -1,0 +1,13 @@
+node_modules
+.pnpm-store
+.next
+.env
+.env.local
+coverage
+playwright-report
+test-results
+*.log
+*.tsbuildinfo
+
+# clerk configuration (can include secrets)
+/.clerk/
